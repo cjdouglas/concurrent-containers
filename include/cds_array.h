@@ -20,6 +20,9 @@ class cds_array {
   using reference = T&;
   using const_reference = const T&;
   using iterator = value_type*;
+  using const_iterator = const value_type*;
+  using reverse_iterator = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using size_type = std::size_t;
   using difference_type = std::ptrdiff_t;
 
@@ -45,44 +48,25 @@ class cds_array {
     std::unique_lock<std::shared_mutex> lock_;
   };
 
-  // An iterator that locks the container for reading & writing.
-  struct write_iterator {
-    explicit write_iterator(cds_array& arr) : array_(arr), lock_(arr.mutex_) {}
-    write_iterator(const write_iterator&) = delete;
-    write_iterator& operator=(const write_iterator&) = delete;
-    write_iterator(write_iterator&&) = default;
-    write_iterator& operator=(write_iterator&&) = default;
+  // An object which acquires a read lock at construction, allowing for
+  // efficient batch reads.
+  struct scoped_read {
+    explicit scoped_read(cds_array& arr) : array_(arr), lock_(arr.mutex_) {}
+    scoped_read(const scoped_read&) = delete;
+    scoped_read& operator=(const scoped_read&) = delete;
+    scoped_read(scoped_read&&) = default;
+    scoped_read& operator=(scoped_read&&) = default;
 
-    void operator++() { ++i_; }
-    void operator--() { --i_; }
-    reference operator*() { return array_.buffer_[i_]; }
+    const_reference at(const size_type pos) const {
+      if (pos >= array_.size()) {
+        throw std::out_of_range("element access out of range");
+      }
 
-    iterator begin() { return &array_.buffer_[0]; }
-    iterator end() { return &array_.buffer_[N]; }
-
-   private:
-    size_type i_ = 0;
-    cds_array& array_;
-    std::unique_lock<std::shared_mutex> lock_;
-  };
-
-  // An iterator that locks the container for reading.
-  struct read_iterator {
-    explicit read_iterator(cds_array& arr) : array_(arr), lock_(arr.mutex_) {}
-    read_iterator(const read_iterator&) = delete;
-    read_iterator& operator=(const read_iterator&) = delete;
-    read_iterator(read_iterator&&) = default;
-    read_iterator& operator=(read_iterator&&) = default;
-
-    void operator++() { ++i_; }
-    void operator--() { --i_; }
-    const_reference operator*() { return array_.buffer_[i_]; }
-
-    iterator begin() { return &array_.buffer_[0]; }
-    iterator end() { return &array_.buffer_[N]; }
+      return array_.buffer_[pos];
+    }
+    const_reference operator[](const size_type pos) const { return at(pos); }
 
    private:
-    size_type i_ = 0;
     cds_array& array_;
     std::shared_lock<std::shared_mutex> lock_;
   };
@@ -102,23 +86,37 @@ class cds_array {
   }
 
   scoped_write new_scoped_write() { return scoped_write(*this); }
+  scoped_read new_scoped_read() { return scoped_read(*this); }
 
   // Iterators
+  // WARNING: iterators are not inherently thread-safe. Please acquire a
+  // scoped_read or scoped_write before using them. See documentation & examples
+  // for sample usage.
 
-  write_iterator new_write_iterator() { return write_iterator(*this); }
+  iterator begin() { return &buffer_[0]; }
+  iterator end() { return &buffer_[N]; }
+  reverse_iterator rbegin() { return reverse_iterator(end()); }
+  reverse_iterator rend() { return reverse_iterator(begin()); }
 
-  read_iterator new_read_iterator() { return read_iterator(*this); }
+  const_iterator cbegin() const { return &buffer_[0]; }
+  const_iterator cend() const { return &buffer_[N]; }
+  const_reverse_iterator crbegin() const {
+    return const_reverse_iterator(cend());
+  }
+  const_reverse_iterator crend() const {
+    return const_reverse_iterator(cbegin());
+  }
 
   // Utilities
 
   void fill(const_reference val) {
-    write_iterator iter(*this);
-    std::fill(iter.begin(), iter.end(), val);
+    auto scoped_write = new_scoped_write();
+    std::fill(begin(), end(), val);
   }
   void swap(cds_array& other) noexcept(std::is_nothrow_swappable_v<T>) {
-    write_iterator iter_this(*this);
-    write_iterator iter_other(other);
-    std::swap_ranges(iter_this.begin(), iter_this.end(), iter_other.begin());
+    auto scoped_this = new_scoped_write();
+    auto scoped_other = other.new_scoped_write();
+    std::swap_ranges(begin(), end(), other.begin());
   }
 
   // Read-only element access

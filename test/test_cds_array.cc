@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <iostream>
 #include <stdexcept>
@@ -110,4 +111,71 @@ TEST(TestCdsArray, TestScopedWrite) {
   EXPECT_EQ(a[0], 4);
   EXPECT_EQ(a[1], 5);
   EXPECT_EQ(a[2], 6);
+}
+
+TEST(TestCdsArray, TestScopedRead) {
+  cds_array<int, 3> a{1, 2, 3};
+
+  {
+    auto scoped_read = a.new_scoped_read();
+    EXPECT_EQ(scoped_read[0], 1);
+    EXPECT_EQ(scoped_read.at(0), 1);
+    EXPECT_EQ(scoped_read[1], 2);
+    EXPECT_EQ(scoped_read.at(2), 3);
+    EXPECT_EQ(scoped_read[1], 2);
+    EXPECT_EQ(scoped_read.at(2), 3);
+  }
+}
+
+TEST(TestCdsArray, TestIterators) {
+  cds_array<int, 3> a{1, 2, 3};
+
+  std::size_t i = 0;
+  for (auto it = a.begin(); it != a.end(); ++it) {
+    EXPECT_EQ(*it, a[i++]);
+  }
+
+  i = 2;
+  for (auto it = a.rbegin(); it != a.rend(); ++it) {
+    EXPECT_EQ(*it, a[i--]);
+  }
+
+  i = 0;
+  for (auto it = a.cbegin(); it != a.cend(); ++it) {
+    EXPECT_EQ(*it, a[i++]);
+  }
+
+  i = 2;
+  for (auto it = a.crbegin(); it != a.crend(); ++it) {
+    EXPECT_EQ(*it, a[i--]);
+  }
+}
+
+TEST(TestCdsArray, TestStdSort) {
+  const std::size_t N = 5;
+  cds_array<int, N> a{5, 2, 17, -1, 0};
+  const int increasing[N] = {-1, 0, 2, 5, 17};
+  const int decreasing[N] = {17, 5, 2, 0, -1};
+
+  {
+    auto scoped_write = a.new_scoped_write();
+    std::sort(a.begin(), a.end());
+  }
+  {
+    auto scoped_read = a.new_scoped_read();
+    for (std::size_t i = 0; i < N; ++i) {
+      EXPECT_EQ(a[i], increasing[i]);
+    }
+  }
+
+  {
+    auto scoped_write = a.new_scoped_write();
+    std::sort(a.rbegin(), a.rend());
+  }
+  {
+    auto scoped_read = a.new_scoped_read();
+    for (std::size_t i = 0; i < N; ++i) {
+      EXPECT_EQ(a[i], decreasing[i]);
+    }
+  }
 }
