@@ -1,7 +1,6 @@
 ﻿cmake_minimum_required (VERSION 3.15)
 
 # Configuration options
-
 option(
 	CDS_BUILD_TESTS
 	"If ON, cds will build a test executable."
