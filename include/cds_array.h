@@ -35,13 +35,16 @@ class cds_array {
     scoped_write(scoped_write&&) = default;
     scoped_write& operator=(scoped_write&&) = default;
 
-    void set(const size_type pos, const_reference value) {
+    reference at(const size_type pos) {
       if (pos >= array_.size()) {
         throw std::out_of_range("element access out of range");
       }
 
-      array_.buffer_[pos] = value;
+      return array_.buffer_[pos];
     }
+    reference operator[](const size_type pos) { return at(pos); }
+    reference front() { return at(0); }
+    reference back() { return at(array_.size() - 1); }
 
    private:
     cds_array& array_;
@@ -65,14 +68,18 @@ class cds_array {
       return array_.buffer_[pos];
     }
     const_reference operator[](const size_type pos) const { return at(pos); }
+    const_reference front() const { return at(0); }
+    const_reference back() const { return at(array_.size() - 1); }
 
    private:
     cds_array& array_;
     std::shared_lock<std::shared_mutex> lock_;
   };
 
+  // Constructor
+
   template <typename... Ts>
-  constexpr cds_array(Ts... ts) : buffer_{ts...} {}
+  cds_array(Ts... ts) : buffer_{ts...} {}
 
   // Write interface
 

@@ -4,7 +4,8 @@ enable_testing()
 
 set(
   SOURCES
-  test_cds_array.cc
+  test_array.cc
+  test_array_concurrent.cc
 )
 
 add_executable(cds-tests ${SOURCES})
