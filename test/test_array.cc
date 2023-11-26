@@ -21,6 +21,47 @@ TEST(TestArray, TestConstructor) {
   EXPECT_EQ(b[2], 0);
 }
 
+TEST(TestArray, TestCopyConstructor) {
+  const cds_array<int, 3> a{1, 2, 3};
+  EXPECT_EQ(a[0], 1);
+  EXPECT_EQ(a[1], 2);
+  EXPECT_EQ(a[2], 3);
+
+  const cds_array<int, 3> b(a);
+  EXPECT_EQ(b[0], 1);
+  EXPECT_EQ(b[1], 2);
+  EXPECT_EQ(b[2], 3);
+}
+
+TEST(TestArray, TestCopyAssignment) {
+  const cds_array<int, 3> a{1, 2, 3};
+  cds_array<int, 3> b;
+  EXPECT_EQ(b[0], 0);
+  EXPECT_EQ(b[1], 0);
+  EXPECT_EQ(b[2], 0);
+
+  b = a;
+  EXPECT_EQ(b[0], 1);
+  EXPECT_EQ(b[1], 2);
+  EXPECT_EQ(b[2], 3);
+}
+
+TEST(TestArray, TestMoveConstructor) {
+  const cds_array<int, 3> a{1, 2, 3};
+  cds_array<int, 3> b(std::move(a));
+  EXPECT_EQ(b[0], 1);
+  EXPECT_EQ(b[1], 2);
+  EXPECT_EQ(b[2], 3);
+}
+
+TEST(TestArray, TestMoveAssignment) {
+  const cds_array<int, 3> a{1, 2, 3};
+  cds_array<int, 3> b = std::move(a);
+  EXPECT_EQ(b[0], 1);
+  EXPECT_EQ(b[1], 2);
+  EXPECT_EQ(b[2], 3);
+}
+
 TEST(TestArray, TestSizeOps) {
   const cds_array<int, 3> a{1, 2, 3};
   EXPECT_FALSE(a.empty());

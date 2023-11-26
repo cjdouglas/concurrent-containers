@@ -41,7 +41,8 @@ class cds_array {
   using difference_type = std::ptrdiff_t;
 
   /// @brief A convenience struct which acquires a write lock for the target
-  /// array and exposes an interface for batch writes.
+  /// array and exposes an interface for batch writes. Unlike cds_array,
+  /// these functions do not acquire a lock at each write.
   struct scoped_write {
     /// @brief Construct a new scoped_write.
     /// @param arr The input cds_array to build the scoped_write object for.
@@ -83,7 +84,8 @@ class cds_array {
   };
 
   /// @brief A convenience struct which acquires a read lock for the target
-  /// array and exposes an interface for batch reads.
+  /// array and exposes an interface for batch reads. Unlike cds_array, these
+  /// functions do not acquire a lock at each read.
   struct scoped_read {
     /// @brief Construct a new scoped_read.
     /// @param arr The input cds_array to build the scoped_read object for.
@@ -130,6 +132,48 @@ class cds_array {
   /// @param ...ts Variadic argument used to initialize the cds_array.
   template <typename... Ts>
   cds_array(Ts... ts) : buffer_{ts...} {}
+
+  /// @brief Copy constructor. Copies the contents of other.
+  /// @warning This is not thread-safe operation by itself. Please acquire a
+  /// scoped_read before copying the source array.
+  /// @param other The source cds_array to copy from.
+  cds_array(const cds_array& other) {
+    std::copy(other.cbegin(), other.cend(), begin());
+  }
+
+  /// @brief Copy assignment operator. Acquires a write lock and copies the
+  /// contents of other.
+  /// @warning This is not thread-safe operation by itself. Please acquire a
+  /// scoped_read before copying the source array.
+  /// @param other The source cds_array to copy from.
+  /// @return A reference to the copied array (this).
+  cds_array& operator=(const cds_array& other) {
+    auto write_lock = new_scoped_write();
+    std::copy(other.cbegin(), other.cend(), begin());
+    return *this;
+  }
+
+  /// @brief Move constructor.
+  /// @note This operation does not affect the source container. It is
+  /// essentially a copy.
+  /// @warning This is not thread-safe operation by itself. Please acquire a
+  /// scoped_read before moving the source array.
+  /// @param other The source cds_array to copy from.
+  cds_array(cds_array&& other) {
+    std::copy(other.cbegin(), other.cend(), begin());
+  }
+
+  /// @brief Move assignment operator.
+  /// @note This operation does not affect the source container. It is
+  /// essentially a copy.
+  /// @warning This is not thread-safe operation by itself. Please acquire a
+  /// scoped_read before moving the source array.
+  /// @param other The source cds_array to copy from.
+  cds_array& operator=(cds_array&& other) {
+    auto write_lock = new_scoped_write();
+    std::copy(other.cbegin(), other.cend(), begin());
+    return *this;
+  }
 
   /// @brief Returns a new scoped_write from this array for batch write
   /// operations.

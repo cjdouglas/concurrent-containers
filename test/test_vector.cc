@@ -1,22 +1,71 @@
 #include <gtest/gtest.h>
 
+#include <cstddef>
+#include <iostream>
+#include <memory>
+#include <random>
+#include <utility>
 #include <vector>
 
 #include "cds_vector.h"
 
 using cds::cds_vector;
 
-struct ThrowType {
-  static bool should_throw;
+namespace {
+static bool random_bool() {
+  static auto gen = std::bind(std::uniform_int_distribution<>(0, 1),
+                              std::default_random_engine());
+  return gen();
+}
+}  // namespace
 
-  ThrowType() {
-    if (should_throw) {
+struct RandomThrowType {
+  RandomThrowType() {
+    if (random_bool()) {
       throw std::runtime_error("Test exception");
     }
   }
 };
 
-bool ThrowType::should_throw = false;
+struct CountAllocatorState {
+  bool allocated = false;
+  bool deallocated = false;
+  int constructed = 0;
+  int destructed = 0;
+};
+
+template <typename T>
+struct CountAllocator : public std::allocator<T> {
+  CountAllocator() : state(std::make_shared<CountAllocatorState>()) {}
+
+  CountAllocator(const CountAllocator& other)
+      : std::allocator<T>(other), state(other.state) {}
+
+  T* allocate(const std::size_t n) {
+    T* ptr = std::allocator<T>::allocate(n);
+    state->allocated = true;
+    return ptr;
+  }
+
+  void deallocate(T* p, const std::size_t n) {
+    std::allocator<T>::deallocate(p, n);
+    state->deallocated = true;
+  }
+
+  template <typename U, typename... Args>
+  void construct(U* p, Args&&... args) {
+    std::allocator<T>::construct(p, std::forward<Args>(args)...);
+    ++state->constructed;
+  }
+
+  template <typename U>
+  void destroy(U* p) {
+    std::allocator<T>::destroy(p);
+    ++state->destructed;
+  }
+
+  std::shared_ptr<CountAllocatorState> state;
+};
 
 TEST(TestVector, TestEmptyConstructor) {
   cds_vector<int> a;
@@ -31,6 +80,15 @@ TEST(TestVector, TestAllocatorConstructor) {
   EXPECT_EQ(a.size(), 0);
   EXPECT_TRUE(a.empty());
   EXPECT_EQ(a.capacity(), 0);
+
+  CountAllocator<int> count_alloc;
+
+  cds_vector<int, CountAllocator<int>> b(count_alloc);
+  EXPECT_EQ(b.size(), 0);
+  EXPECT_TRUE(b.empty());
+  EXPECT_EQ(b.capacity(), 0);
+  EXPECT_FALSE(count_alloc.state->allocated);
+  EXPECT_EQ(count_alloc.state->constructed, 0);
 }
 
 TEST(TestVector, TestCountValueConstructor) {
@@ -66,11 +124,17 @@ TEST(TestVector, TestCountConstructor) {
   EXPECT_EQ(b.size(), 0);
   EXPECT_TRUE(b.empty());
   EXPECT_EQ(b.capacity(), 0);
+}
 
-  ThrowType::should_throw = true;
-  count = 10;
-  EXPECT_THROW(cds_vector<ThrowType> c(count), std::runtime_error);
-  ThrowType::should_throw = false;
+TEST(TestVector, TestCountConstructorException) {
+  using T = RandomThrowType;
+  std::size_t count = 30;
+  CountAllocator<T> alloc;
+  EXPECT_THROW((cds_vector<T, CountAllocator<T>>(count, alloc)),
+               std::runtime_error);
+  EXPECT_TRUE(alloc.state->allocated);
+  EXPECT_TRUE(alloc.state->deallocated);
+  EXPECT_EQ(alloc.state->constructed, alloc.state->destructed);
 }
 
 TEST(TestVector, TestIterConstructor) {
@@ -112,10 +176,6 @@ TEST(TestVector, TestCopyConstructor) {
   EXPECT_TRUE(u.empty());
   EXPECT_TRUE(v.empty());
   EXPECT_EQ(u.size(), v.size());
-}
-
-TEST(TestVector, TestCopyAllocConstructor) {
-  // TODO
 }
 
 TEST(TestVector, TestMoveConstructor) {

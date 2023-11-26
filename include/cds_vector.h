@@ -67,13 +67,13 @@ class cds_vector {
   cds_vector(const size_type count, const T& value,
              const Allocator& alloc = Allocator())
       : allocator_(alloc) {
-    start_ = allocator_.allocate(count);
+    start_ = std::allocator_traits<Allocator>::allocate(allocator_, count);
     end_ = start_ + count;
     end_of_storage_ = end_;
     try {
       std::fill(start_, end_, value);
     } catch (...) {
-      allocator_.deallocate(start_, count);
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_, count);
       throw;
     }
   }
@@ -85,18 +85,18 @@ class cds_vector {
   explicit cds_vector(const size_type count,
                       const Allocator& alloc = Allocator())
       : allocator_(alloc) {
-    start_ = allocator_.allocate(count);
+    start_ = std::allocator_traits<Allocator>::allocate(allocator_, count);
     end_of_storage_ = start_ + count;
 
     try {
       for (end_ = start_; end_ != end_of_storage_; ++end_) {
-        allocator_.construct(end_);
+        std::allocator_traits<Allocator>::construct(allocator_, end_);
       }
     } catch (...) {
       while (end_ != start_) {
-        allocator_.destroy(end_--);
+        std::allocator_traits<Allocator>::destroy(allocator_, end_--);
       }
-      allocator_.deallocate(start_, count);
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_, count);
       throw;
     }
   }
@@ -110,12 +110,12 @@ class cds_vector {
   cds_vector(InputIt first, InputIt last, const Allocator& alloc = Allocator())
       : allocator_(alloc) {
     const size_type count = std::distance(first, last);
-    start_ = allocator_.allocate(count);
+    start_ = std::allocator_traits<Allocator>::allocate(allocator_, count);
     end_of_storage_ = start_ + count;
     try {
       end_ = std::uninitialized_copy(first, last, start_);
     } catch (...) {
-      allocator_.deallocate(start_, count);
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_, count);
       throw;
     }
   }
@@ -127,12 +127,12 @@ class cds_vector {
             std::allocator_traits<allocator_type>::
                 select_on_container_copy_construction(other.allocator_)) {
     const size_type size = std::distance(other.start_, other.end_of_storage_);
-    start_ = allocator_.allocate(size);
+    start_ = std::allocator_traits<Allocator>::allocate(allocator_, size);
     end_of_storage_ = start_ + size;
     try {
       end_ = std::uninitialized_copy(other.start_, other.end_, start_);
     } catch (...) {
-      allocator_.deallocate(start_, size);
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_, size);
       throw;
     }
   }
@@ -143,12 +143,12 @@ class cds_vector {
   cds_vector(const cds_vector& other, const Allocator& alloc)
       : allocator_(alloc) {
     const size_type size = std::distance(other.start_, other.end_of_storage_);
-    start_ = allocator_.allocate(size);
+    std::allocator_traits<Allocator>::allocate(allocator_, size);
     end_of_storage_ = start_ + size;
     try {
       end_ = std::uninitialized_copy(other.start_, other.end_, start_);
     } catch (...) {
-      allocator_.deallocate(start_, size);
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_, size);
       throw;
     }
   }
@@ -174,14 +174,14 @@ class cds_vector {
       end_of_storage_ = std::exchange(other.end_of_storage_, nullptr);
     } else {
       const size_type size = std::distance(other.start_, other.end_of_storage_);
-      start_ = allocator_.allocate(size);
+      start_ = std::allocator_traits<Allocator>::allocate(allocator_, size);
       end_of_storage_ = start_ + size;
       try {
         end_ = std::uninitialized_copy(std::make_move_iterator(other.start_),
                                        std::make_move_iterator(other.end_),
                                        start_);
       } catch (...) {
-        allocator_.deallocate(start_, size);
+        std::allocator_traits<Allocator>::deallocate(allocator_, start_, size);
         throw;
       }
     }
@@ -193,18 +193,28 @@ class cds_vector {
   cds_vector(std::initializer_list<T> init,
              const Allocator& alloc = Allocator())
       : allocator_(alloc) {
-    start_ = allocator_.allocate(init.size());
-    end_of_storage_ = start_ + init.size();
+    const size_type size = init.size();
+    start_ = std::allocator_traits<Allocator>::allocate(allocator_, size);
+    end_of_storage_ = start_ + size;
     try {
       end_ = std::uninitialized_copy(init.begin(), init.end(), start_);
     } catch (...) {
-      allocator_.deallocate(start_, init.size());
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_, size);
       throw;
     }
   }
 
-  /// @brief Destroys the cds_vector instance.
-  ~cds_vector() { allocator_.deallocate(start_, end_of_storage_ - start_); }
+  /// @brief Destroys all objects and deallocates the allocated memory.
+  ~cds_vector() {
+    for (auto ptr = start_; ptr != end_; ++ptr) {
+      std::allocator_traits<Allocator>::destroy(allocator_, ptr);
+    }
+
+    if (start_) {
+      std::allocator_traits<Allocator>::deallocate(allocator_, start_,
+                                                   end_of_storage_ - start_);
+    }
+  }
 
   cds_vector& operator=(const cds_vector& other);
   cds_vector& operator=(cds_vector&& other);
@@ -214,8 +224,16 @@ class cds_vector {
 
   const_reference operator[](const size_type pos) { return *(start_ + pos); }
 
+  /// @brief Checks if the container is empty.
+  /// @return true if empty, false otherwise.
   bool empty() const noexcept { return !(end_ - start_); }
+
+  /// @brief Returns the number of elements in the container.
+  /// @return The number of elements in the container.
   size_type size() const noexcept { return end_ - start_; }
+
+  /// @brief Returns the total reserved capacity of the container.
+  /// @return The reserved capacity of the container.
   size_type capacity() const noexcept { return end_of_storage_ - start_; }
 
  private:
