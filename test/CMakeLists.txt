@@ -6,6 +6,7 @@ set(
   SOURCES
   test_array.cc
   test_array_concurrent.cc
+  test_vector.cc
 )
 
 add_executable(cds-tests ${SOURCES})
