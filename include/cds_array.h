@@ -9,12 +9,17 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "cds_lock_strategy.h"
+
 namespace cds {
 
 /// @brief A thread-safe static array inspired by std::array.
 /// @tparam T The type of object the array will hold.
 /// @tparam N The number of elements the array will hold.
-template <typename T, std::size_t N>
+/// @tparam LockStrategy LockStrategy The strategy used to provide thread-safe
+/// access to the container.
+template <typename T, std::size_t N,
+          typename LockStrategy = DefaultLockStrategy>
 class cds_array {
   static_assert(N, "cds_array does not support empty arrays");
 
@@ -46,7 +51,8 @@ class cds_array {
   struct scoped_write {
     /// @brief Construct a new scoped_write.
     /// @param arr The input cds_array to build the scoped_write object for.
-    explicit scoped_write(cds_array& arr) : array_(arr), lock_(arr.mutex_) {}
+    explicit scoped_write(cds_array& arr)
+        : array_(arr), lock_(arr.lock_.acquire_exclusive_lock()) {}
     scoped_write(const scoped_write&) = delete;
     scoped_write& operator=(const scoped_write&) = delete;
     scoped_write(scoped_write&&) = default;
@@ -89,7 +95,8 @@ class cds_array {
   struct scoped_read {
     /// @brief Construct a new scoped_read.
     /// @param arr The input cds_array to build the scoped_read object for.
-    explicit scoped_read(cds_array& arr) : array_(arr), lock_(arr.mutex_) {}
+    explicit scoped_read(cds_array& arr)
+        : array_(arr), lock_(arr.lock_.acquire_shared_lock()) {}
     scoped_read(const scoped_read&) = delete;
     scoped_read& operator=(const scoped_read&) = delete;
     scoped_read(scoped_read&&) = default;
@@ -247,7 +254,7 @@ class cds_array {
       throw std::out_of_range("element access out of range");
     }
 
-    std::unique_lock write(mutex_);
+    auto lock = lock_.acquire_exclusive_lock();
     buffer_[pos] = value;
   }
 
@@ -276,7 +283,7 @@ class cds_array {
       throw std::out_of_range("element access out of range");
     }
 
-    std::shared_lock read(mutex_);
+    const auto& lock = lock_.acquire_shared_lock();
     return buffer_[pos];
   }
 
@@ -290,7 +297,7 @@ class cds_array {
   /// the front of the array.
   /// @return A reference to the value at the front of the array.
   const_reference front() const {
-    std::shared_lock read(mutex_);
+    const auto& lock = lock_.acquire_shared_lock();
     return buffer_[0];
   }
 
@@ -298,7 +305,7 @@ class cds_array {
   /// the back of the array.
   /// @return A reference to the value at the back of the array.
   const_reference back() const {
-    std::shared_lock read(mutex_);
+    const auto& lock = lock_.acquire_shared_lock();
     return buffer_[N - 1];
   }
 
@@ -320,5 +327,6 @@ class cds_array {
  private:
   T buffer_[N];
   mutable std::shared_mutex mutex_;
+  LockStrategy lock_;
 };
 }  // namespace cds

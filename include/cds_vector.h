@@ -9,13 +9,18 @@
 #include <type_traits>
 #include <utility>
 
+#include "cds_lock_strategy.h"
+
 namespace cds {
 
 /// @brief A thread-safe dynamic array inspired by std::vector.
 /// @tparam T The type of object the vector will hold.
 /// @tparam Allocator The allocator used to acquire/release memory, and
 /// construct/destroy elements.
-template <typename T, typename Allocator = std::allocator<T>>
+/// @tparam LockStrategy The strategy used to provide thread-safe access to the
+/// container.
+template <typename T, typename Allocator = std::allocator<T>,
+          typename LockStrategy = DefaultLockStrategy>
 class cds_vector {
  public:
   /// @brief Template parameter T.
