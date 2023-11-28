@@ -5,11 +5,10 @@
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <type_traits>
 #include <utility>
-
-#include "cds_lock_strategy.h"
 
 namespace cds {
 
@@ -17,10 +16,7 @@ namespace cds {
 /// @tparam T The type of object the vector will hold.
 /// @tparam Allocator The allocator used to acquire/release memory, and
 /// construct/destroy elements.
-/// @tparam LockStrategy The strategy used to provide thread-safe access to the
-/// container.
-template <typename T, typename Allocator = std::allocator<T>,
-          typename LockStrategy = DefaultLockStrategy>
+template <typename T, typename Allocator = std::allocator<T>>
 class cds_vector {
  public:
   /// @brief Template parameter T.
@@ -125,12 +121,13 @@ class cds_vector {
     }
   }
 
-  /// @brief Copy constructor. Copies the contents of other.
+  /// @brief Copy constructor. Locks & copies the contents of other.
   /// @param other The source cds_vector to copy from.
   cds_vector(const cds_vector& other)
       : allocator_(
             std::allocator_traits<allocator_type>::
                 select_on_container_copy_construction(other.allocator_)) {
+    std::lock_guard<std::shared_mutex> lock(other.mutex_);
     const size_type size = std::distance(other.start_, other.end_of_storage_);
     start_ = std::allocator_traits<Allocator>::allocate(allocator_, size);
     end_of_storage_ = start_ + size;
@@ -142,11 +139,12 @@ class cds_vector {
     }
   }
 
-  /// @brief Copies the contents of other, using allocator alloc.
+  /// @brief Locks & copies the contents of other, using allocator alloc.
   /// @param other The source cds_vector to copy from.
   /// @param alloc The allocator to use for all memory allocations.
   cds_vector(const cds_vector& other, const Allocator& alloc)
       : allocator_(alloc) {
+    std::lock_guard<std::shared_mutex> lock(other.mutex_);
     const size_type size = std::distance(other.start_, other.end_of_storage_);
     std::allocator_traits<Allocator>::allocate(allocator_, size);
     end_of_storage_ = start_ + size;
@@ -158,21 +156,25 @@ class cds_vector {
     }
   }
 
-  /// @brief Move constructor. Uses move semantics to move the contents of
-  /// other.
+  /// @brief Move constructor. Locks & uses move semantics to move the contents
+  /// of other.
   /// @param other The source cds_vector to move.
-  cds_vector(cds_vector&& other) noexcept
-      : allocator_(std::move(other.allocator_)),
-        start_(std::exchange(other.start_, nullptr)),
-        end_(std::exchange(other.end_, nullptr)),
-        end_of_storage_(std::exchange(other.end_of_storage_, nullptr)) {}
+  cds_vector(cds_vector&& other) noexcept {
+    std::lock_guard<std::shared_mutex> lock(other.mutex_);
+    allocator_(std::move(other.allocator_));
+    start_(std::exchange(other.start_, nullptr));
+    end_(std::exchange(other.end_, nullptr));
+    end_of_storage_(std::exchange(other.end_of_storage_, nullptr));
+  }
 
-  /// @brief Allocator-extended move constructor. Uses move semantics if alloc
+  /// @brief Allocator-extended move constructor. Locks & uses move semantics if
+  /// alloc
   /// == other.allocator_. Otherwise, it uses an element-wise move (other is not
   /// guaranteed to be empty after this operation).
   /// @param other The source cds_vector to move.
   /// @param alloc The allocator to use for all memory allocations.
   cds_vector(cds_vector&& other, const Allocator& alloc) : allocator_(alloc) {
+    std::lock_guard<std::shared_mutex> lock(other.mutex_);
     if (allocator_ == other.allocator_) {
       start_ = std::exchange(other.start_, nullptr);
       end_ = std::exchange(other.end_, nullptr);
@@ -227,19 +229,31 @@ class cds_vector {
   iterator begin() { return start_; }
   iterator end() { return end_; }
 
-  const_reference operator[](const size_type pos) { return *(start_ + pos); }
+  const_reference operator[](const size_type pos) {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return *(start_ + pos);
+  }
 
   /// @brief Checks if the container is empty.
   /// @return true if empty, false otherwise.
-  bool empty() const noexcept { return !(end_ - start_); }
+  bool empty() const noexcept {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return empty_unlocked_();
+  }
 
   /// @brief Returns the number of elements in the container.
   /// @return The number of elements in the container.
-  size_type size() const noexcept { return end_ - start_; }
+  size_type size() const noexcept {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return size_unlocked_();
+  }
 
   /// @brief Returns the total reserved capacity of the container.
   /// @return The reserved capacity of the container.
-  size_type capacity() const noexcept { return end_of_storage_ - start_; }
+  size_type capacity() const noexcept {
+    std::shared_lock<std::shared_mutex> lock(mutex_);
+    return capacity_unlocked_();
+  }
 
  private:
   pointer start_;
@@ -247,5 +261,11 @@ class cds_vector {
   pointer end_of_storage_;
   Allocator allocator_;
   mutable std::shared_mutex mutex_;
+
+  bool empty_unlocked_() const noexcept { return !(end_ - start_); }
+  size_type size_unlocked_() const noexcept { return end_ - start_; }
+  size_type capacity_unlocked_() const noexcept {
+    return end_of_storage_ - start_;
+  }
 };
 }  // namespace cds

@@ -7,6 +7,9 @@ option(
 	OFF
 )
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # In source guard
@@ -28,8 +31,6 @@ add_library(
 	INTERFACE
 )
 target_include_directories(cds-core INTERFACE include)
-
-set_property(TARGET cds-core PROPERTY CXX_STANDARD 17)
 set_property(TARGET cds-core PROPERTY LINKER_LANGUAGE CXX)
 
 if (CDS_BUILD_TESTS)
