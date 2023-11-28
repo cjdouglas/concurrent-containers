@@ -70,7 +70,7 @@ TEST(TestArrayConcurrent, ConcurrentReadsWrites) {
 
     // In this block, we verify all values are equivalent (ensuring no writers
     // are active during the read)
-    readers.emplace_back([&a, i]() {
+    readers.emplace_back([&a, i, n_threads]() {
       auto read = a.new_scoped_read();
       const int expected = read[0];
       EXPECT_TRUE(expected >= 0 && expected < static_cast<int>(n_threads));
@@ -86,5 +86,68 @@ TEST(TestArrayConcurrent, ConcurrentReadsWrites) {
 
   for (std::thread& t : readers) {
     t.join();
+  }
+}
+
+TEST(TestArrayConcurrent, SwapNoDeadlock) {
+  const std::size_t N = 5;
+  cds_array<int, N> a{1, 2, 3, 4, 5};
+  cds_array<int, N> b{5, 4, 3, 2, 1};
+
+  const int n_swaps = 1000;
+  auto a_swap_b = [&a, &b, n_swaps]() {
+    for (int i = 0; i < n_swaps; ++i) {
+      a.swap(b);
+    }
+  };
+
+  auto b_swap_a = [&a, &b, n_swaps]() {
+    for (int i = 0; i < n_swaps; ++i) {
+      b.swap(a);
+    }
+  };
+
+  std::thread t1(a_swap_b);
+  std::thread t2(b_swap_a);
+  std::thread t3(a_swap_b);
+  std::thread t4(b_swap_a);
+
+  t1.join();
+  t2.join();
+  t3.join();
+  t4.join();
+
+  // One final swap to swap values again
+  a.swap(b);
+  for (std::size_t i = 0; i < N; ++i) {
+    EXPECT_EQ(a[i], b[N - i - 1]);
+  }
+}
+
+TEST(TestArrayConcurrent, FillIsUnique) {
+  const std::size_t N = 5;
+  cds_array<int, N> a{-1, -1, -1, -1, -1};
+
+  const int n_fills = 1000;
+  auto fill = [&a, n_fills](const int val) {
+    for (int i = 0; i < n_fills; ++i) {
+      a.fill(val);
+    }
+  };
+
+  std::thread t1(fill, 0);
+  std::thread t2(fill, 1);
+  std::thread t3(fill, 2);
+  std::thread t4(fill, 3);
+
+  t1.join();
+  t2.join();
+  t3.join();
+  t4.join();
+
+  const int val = a[0];
+  EXPECT_TRUE(val >= 0 && val <= 3);
+  for (std::size_t i = 0; i < N; ++i) {
+    EXPECT_EQ(a[i], val);
   }
 }

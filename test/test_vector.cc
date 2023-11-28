@@ -95,7 +95,7 @@ TEST(TestVector, TestCountValueConstructor) {
   std::size_t count = 10;
   const int value = 3;
 
-  cds_vector a(count, value);
+  cds_vector<int> a(count, value);
   EXPECT_EQ(a.size(), count);
   EXPECT_FALSE(a.empty());
   EXPECT_EQ(a.capacity(), count);
