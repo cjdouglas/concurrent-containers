@@ -8,7 +8,7 @@
 
 using cds::cds_array;
 
-TEST(TestArrayConcurrent, ConcurrentReads) {
+TEST(TestArrayConcurrency, ConcurrentReads) {
   cds_array<int, 10> a{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 
   const std::size_t n_threads = 4;
@@ -28,7 +28,7 @@ TEST(TestArrayConcurrent, ConcurrentReads) {
   }
 }
 
-TEST(TestArrayConcurrent, ConcurrentWrites) {
+TEST(TestArrayConcurrency, ConcurrentWrites) {
   cds_array<int, 10> a{};
 
   const std::size_t n_threads = 4;
@@ -53,7 +53,7 @@ TEST(TestArrayConcurrent, ConcurrentWrites) {
   }
 }
 
-TEST(TestArrayConcurrent, ConcurrentReadsWrites) {
+TEST(TestArrayConcurrency, ConcurrentReadsWrites) {
   cds_array<int, 10> a{};
 
   const std::size_t n_threads = 4;
@@ -89,10 +89,12 @@ TEST(TestArrayConcurrent, ConcurrentReadsWrites) {
   }
 }
 
-TEST(TestArrayConcurrent, SwapNoDeadlock) {
-  const std::size_t N = 5;
-  cds_array<int, N> a{1, 2, 3, 4, 5};
-  cds_array<int, N> b{5, 4, 3, 2, 1};
+TEST(TestArrayConcurrency, SwapNoDeadlock) {
+  const std::size_t N = 100;
+  cds_array<int, N> a;
+  a.fill(0);
+  cds_array<int, N> b;
+  b.fill(1);
 
   const int n_swaps = 1000;
   auto a_swap_b = [&a, &b, n_swaps]() {
@@ -120,13 +122,15 @@ TEST(TestArrayConcurrent, SwapNoDeadlock) {
   // One final swap to swap values again
   a.swap(b);
   for (std::size_t i = 0; i < N; ++i) {
-    EXPECT_EQ(a[i], b[N - i - 1]);
+    EXPECT_EQ(a[i], 1);
+    EXPECT_EQ(b[i], 0);
   }
 }
 
-TEST(TestArrayConcurrent, FillIsUnique) {
-  const std::size_t N = 5;
-  cds_array<int, N> a{-1, -1, -1, -1, -1};
+TEST(TestArrayConcurrency, FillIsUnique) {
+  const std::size_t N = 100;
+  cds_array<int, N> a;
+  a.fill(-1);
 
   const int n_fills = 1000;
   auto fill = [&a, n_fills](const int val) {

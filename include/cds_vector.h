@@ -225,9 +225,17 @@ class cds_vector {
 
   cds_vector& operator=(const cds_vector& other);
   cds_vector& operator=(cds_vector&& other);
+  cds_vector& operator=(std::initializer_list<T> ilist);
 
   iterator begin() { return start_; }
   iterator end() { return end_; }
+  reverse_iterator rbegin() { return reverse_iterator(end()); }
+  reverse_iterator rend() { return reverse_iterator(begin()); }
+
+  const_iterator cbegin() { return const_iterator(begin()); }
+  const_iterator cend() { return const_iterator(begin()); }
+  const_reverse_iterator crbegin() { return const_reverse_iterator(end()); }
+  const_reverse_iterator crend() { return const_reverse_iterator(begin()); }
 
   const_reference operator[](const size_type pos) {
     std::shared_lock<std::shared_mutex> lock(mutex_);
